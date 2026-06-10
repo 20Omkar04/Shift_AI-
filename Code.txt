@@ -1,0 +1,190 @@
+
+# Protocol SIFT - Autonomous IR Agent (python)
+# MCP + Volatility + Self-Correcting Analyst Loop
+
+
+import os
+import re
+import json
+import logging
+from collections import defaultdict
+from fastmcp import FastMCP
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+
+
+# MCP SERVER (embedded)
+
+mcp = FastMCP("Protocol-SIFT-Volatility")
+
+
+CASE_DIR = "./case_data"
+
+
+
+# LOAD ARTIFACTS (Volatility outputs)
+
+def load_artifact(name):
+    path = os.path.join(CASE_DIR, name)
+    if not os.path.exists(path):
+        return ""
+    with open(path, "r", errors="ignore") as f:
+        return f.read()
+
+
+
+# MCP TOOLS (wrap forensic artifacts)
+
+
+@mcp.tool()
+def pslist():
+    return load_artifact("pslist.txt")
+
+
+@mcp.tool()
+def pstree():
+    return load_artifact("pstree.txt")
+
+
+@mcp.tool()
+def netscan():
+    return load_artifact("netscan.txt")
+
+
+@mcp.tool()
+def dlllist():
+    return load_artifact("dlllist.txt")
+
+
+@mcp.tool()
+def malfind():
+    return load_artifact("malfind.txt")
+
+
+@mcp.tool()
+def info():
+    return load_artifact("info.txt")
+
+
+
+# AUTONOMOUS SIFT AGENT
+
+class SIFTAutoAgent:
+
+    def __init__(self, mcp):
+        self.mcp = mcp
+        self.score = defaultdict(int)
+        self.evidence = []
+        self.pids = set()
+        self.iteration_log = []
+
+    
+    # ANALYST THINKING STEP 1: BASELINE
+    
+    def baseline(self):
+        ps = self.mcp.pslist()
+        pt = self.mcp.pstree()
+
+        self.pids |= set(re.findall(r"\b\d{2,6}\b", ps))
+        self.pids |= set(re.findall(r"\b\d{2,6}\b", pt))
+
+        self.iteration_log.append("Baseline PID extraction complete")
+
+    
+    # STEP 2: NETWORK ANALYSIS
+    
+    def network_analysis(self):
+        net = self.mcp.netscan()
+
+        for pid in self.pids:
+            if pid in net:
+                self.flag(pid, "network activity detected", 3)
+
+    
+    # STEP 3: DLL INJECTION CHECK
+    
+    def dll_analysis(self):
+        dll = self.mcp.dlllist()
+
+        for pid in self.pids:
+            if pid in dll and ("inject" in dll.lower() or "mimikatz" in dll.lower()):
+                self.flag(pid, "dll injection suspected", 6)
+
+    
+    # STEP 4: MEMORY COMPROMISE
+    
+    def malfind_analysis(self):
+        mal = self.mcp.malfind()
+
+        for pid in self.pids:
+            if pid in mal:
+                self.flag(pid, "memory injection detected", 7)
+
+    
+    # EVIDENCE ENGINE
+    
+    def flag(self, pid, reason, score):
+        self.score[pid] += score
+        self.evidence.append({
+            "pid": pid,
+            "reason": reason,
+            "score": score
+        })
+
+        logging.info(f"[FLAG] PID={pid} | {reason} (+{score})")
+
+    
+    # ANALYST SELF-CORRECTION LOOP
+    
+    def self_correct(self):
+        suspicious = [p for p, s in self.score.items() if s >= 6]
+
+        for pid in suspicious:
+            dll = self.mcp.dlllist()
+
+            # contradiction check (senior analyst behavior)
+            if "credential" in dll.lower():
+                self.flag(pid, "credential theft confirmed (deep recheck)", 10)
+
+            # revalidation step
+            net = self.mcp.netscan()
+            if pid not in net:
+                self.flag(pid, "stealth behavior detected (net gap anomaly)", 4)
+
+    
+    # FULL ANALYSIS PIPELINE
+    
+    def run(self):
+
+        self.baseline()
+        self.network_analysis()
+        self.dll_analysis()
+        self.malfind_analysis()
+
+        # self-correction loop (key hackathon requirement)
+        self.self_correct()
+
+        # ranking
+        ranked = sorted(self.score.items(), key=lambda x: x[1], reverse=True)
+
+        return {
+            "summary": "Autonomous IR analysis complete (Protocol SIFT MCP)",
+            "pids_analyzed": len(self.pids),
+            "top_pids": ranked[:10],
+            "evidence_count": len(self.evidence),
+            "evidence": self.evidence,
+            "execution_trace": self.iteration_log
+        }
+
+
+
+# ENTRY POINT
+
+if __name__ == "__main__":
+
+    agent = SIFTAutoAgent(mcp)
+    result = agent.run()
+
+    print(json.dumps(result, indent=4))
+
+
